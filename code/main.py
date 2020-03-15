@@ -1,68 +1,50 @@
 from tensorflow import keras, losses
-import tensorflow as tf
-
 import matplotlib.pyplot as plt
 import numpy as np
-from os import listdir, scandir, environ
+
+from os import environ
 import os
 import os.path as path
 import argparse
 
-import imageio
-import glob
 
 dir_path = path.dirname(path.realpath(__file__))
 
 save_path = path.join(dir_path, os.pardir, "model")
 data_path = path.join(dir_path, os.pardir, "shapes")
-image_size = 24
+image_size = 60
 
 
-def show_image(image):
+def show_grayscale_image(image):
     plt.figure()
-    plt.imshow(image)
-    plt.shw()
-
-
-def trim_label(label):
-    return label.split(path.sep)[-1]
-
-
-def saturate(pixel):
-    return np.mean(pixel[0:2]) / 255
-
-
-def remove_channels(image):
-    return np.asarray([[saturate(rgba) for rgba in row] for row in image])
+    plt.imshow(image[:, :, 0], cmap='gray', vmin=0, vmax=1)
+    plt.show()
 
 
 def read_data():
-    shapes_data = []
-    categories_data = []
-    categories = [f.path for f in scandir(data_path) if f.is_dir()]
-
     train_image_generator = keras.preprocessing.image.ImageDataGenerator(rescale=1./255,
                                                                          zoom_range=0.2,
                                                                          rotation_range=5,
-                                                                         horizontal_flip=True)
+                                                                         horizontal_flip=True,
+                                                                         #preprocessing_function=remove_channels
+                                                                         )
 
-    train_data = train_image_generator.flow_from_directory(batch_size=2,
+    train_data = train_image_generator.flow_from_directory(batch_size=6,
                                                            directory=data_path,
+                                                           color_mode='grayscale',
                                                            shuffle=True,
                                                            target_size=(image_size, image_size))
+
+    #x, y = train_data.next()
+    #for sh in x:
+        #show_grayscale_image(sh)
 
     return train_data
 
 
-def encode(name):
-    return 0 if name == 'circle' else 1
-
-
-def train(data):
+def train(training_data):
     model = keras.Sequential([
-        keras.layers.Dense(units=256, activation='relu', input_shape=(image_size, image_size, 3)),
-        keras.layers.MaxPool2D((2, 2)),
-        keras.layers.Conv2D(2, 2, activation='relu'),
+        keras.layers.Dense(units=256, activation='relu', input_shape=(image_size, image_size, 1)),
         keras.layers.Flatten(),
         keras.layers.Dense(units=2, activation='softmax')
     ])
@@ -71,8 +53,8 @@ def train(data):
                   loss=losses.CategoricalCrossentropy(from_logits=True),
                   metrics=['accuracy'])
 
-    history = model.fit_generator(
-        data
+    history = model.fit(
+        training_data
     )
 
     model.save(save_path)
