@@ -4,64 +4,75 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 from os import listdir, scandir, environ
-from os.path import join, sep
+import os
+import os.path as path
 
 import imageio
 import glob
 
+dir_path = path.dirname(path.realpath(__file__))
 
-data_path = "/Users/marcbasquens/Desktop/gesture/shapes"
+data_path = path.join(dir_path, os.pardir, "shapes")
 image_size = 120
 
 
 def show_image(image):
-	plt.figure()
-	plt.imshow(image) 
-	plt.show()
+    plt.figure()
+    plt.imshow(image)
+    plt.shw()
+
 
 def trim_label(label):
-	return label.split(sep)[-1]
+    return label.split(path.sep)[-1]
+
 
 def saturate(pixel):
-	return np.mean(pixel[0:2]) / 255
+    return np.mean(pixel[0:2]) / 255
+
 
 def remove_channels(image):
-	return np.asarray([[saturate(rgba) for rgba in row] for row in image])
+    return np.asarray([[saturate(rgba) for rgba in row] for row in image])
+
 
 def read_data():
-	shapes_data = np.empty([image_size, image_size])
-	categories_data = np.asarray([])
-	categories = [f.path for f in scandir(data_path) if f.is_dir()]
+    shapes_data = []
+    categories_data = []
+    categories = [f.path for f in scandir(data_path) if f.is_dir()]
 
-	for category in categories:
-		for im_path in glob.glob(join(data_path, category, '*.png')):			
-			image = imageio.imread(im_path)
-			saturated_image = remove_channels(image))
-			np.concatenate(shapes_data, saturated_image)
-			np.concatenate(categories_data, trim_label(category))
+    for category in categories:
+        for im_path in glob.glob(path.join(data_path, category, '*.png')):
+            image = imageio.imread(im_path)
+            saturated_image = remove_channels(image)
+            shapes_data.append(saturated_image)
+            categories_data.append(encode(trim_label(category)))
 
-	return categories_data, shapes_data
+    return np.array(categories_data), np.array(shapes_data)
 
-def encode(str):
-	return 0 if str == 'circle' else 1
+
+def encode(name):
+    return 0 if name == 'circle' else 1
+
 
 def train(labels, images):
-	model = keras.Sequential([
-	    keras.layers.Reshape(target_shape=(image_size * image_size,), input_shape=(image_size, image_size)),
-	    keras.layers.Dense(units=256, activation='relu'),
-	    keras.layers.Dense(units=2, activation='softmax')
-	])
+    model = keras.Sequential([
+        keras.layers.Dense(units=256, activation='relu', input_shape=(image_size, image_size)),
+        keras.layers.Flatten(),
+        keras.layers.Dense(units=2, activation='softmax')
+    ])
 
-	model.compile(optimizer='adam', 
-              loss=losses.CategoricalCrossentropy(from_logits=True),
-              metrics=['accuracy'])
+    model.compile(optimizer='adam',
+                  loss=losses.CategoricalCrossentropy(from_logits=True),
+                  metrics=['accuracy'])
 
-	history = model.fit(
-	    labels, 
-	    images
-	)
+    history = model.fit(
+        images,
+        keras.utils.to_categorical(labels)
+    )
 
-if __name__== "__main__":
-	environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-	labels, images = read_data()
-	train(labels, images)
+    print(model.predict(images, batch_size=64)[0])
+
+
+if __name__ == "__main__":
+    environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    labels, images = read_data()
+    train(labels, images)
