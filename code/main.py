@@ -1,67 +1,81 @@
 from tensorflow import keras, losses
-import tensorflow as tf
-
 import matplotlib.pyplot as plt
 import numpy as np
-from os import listdir, scandir, environ
-from os.path import join, sep
 
-import imageio
-import glob
-
-
-data_path = "/Users/marcbasquens/Desktop/gesture/shapes"
-image_size = 120
+from os import environ
+import os
+import os.path as path
+import argparse
 
 
-def show_image(image):
-	plt.figure()
-	plt.imshow(image) 
-	plt.show()
+dir_path = path.dirname(path.realpath(__file__))
 
-def trim_label(label):
-	return label.split(sep)[-1]
+save_path = path.join(dir_path, os.pardir, "model")
+data_path = path.join(dir_path, os.pardir, "shapes")
+image_size = 60
 
-def saturate(pixel):
-	return np.mean(pixel[0:2]) / 255
 
-def remove_channels(image):
-	return np.asarray([[saturate(rgba) for rgba in row] for row in image])
+def show_grayscale_image(image):
+    plt.figure()
+    plt.imshow(image[:, :, 0], cmap='gray', vmin=0, vmax=1)
+    plt.show()
+
 
 def read_data():
-	shapes_data = np.empty([image_size, image_size])
-	categories_data = np.asarray([])
-	categories = [f.path for f in scandir(data_path) if f.is_dir()]
+    train_image_generator = keras.preprocessing.image.ImageDataGenerator(rescale=1./255,
+                                                                         zoom_range=0.2,
+                                                                         rotation_range=5,
+                                                                         horizontal_flip=True,
+                                                                         #preprocessing_function=remove_channels
+                                                                         )
 
-	for category in categories:
-		for im_path in glob.glob(join(data_path, category, '*.png')):			
-			image = imageio.imread(im_path)
-			saturated_image = remove_channels(image))
-			np.concatenate(shapes_data, saturated_image)
-			np.concatenate(categories_data, trim_label(category))
+    train_data = train_image_generator.flow_from_directory(batch_size=6,
+                                                           directory=data_path,
+                                                           color_mode='grayscale',
+                                                           shuffle=True,
+                                                           target_size=(image_size, image_size))
 
-	return categories_data, shapes_data
+    #x, y = train_data.next()
+    #for sh in x:
+        #show_grayscale_image(sh)
 
-def encode(str):
-	return 0 if str == 'circle' else 1
+    return train_data
 
-def train(labels, images):
-	model = keras.Sequential([
-	    keras.layers.Reshape(target_shape=(image_size * image_size,), input_shape=(image_size, image_size)),
-	    keras.layers.Dense(units=256, activation='relu'),
-	    keras.layers.Dense(units=2, activation='softmax')
-	])
 
-	model.compile(optimizer='adam', 
-              loss=losses.CategoricalCrossentropy(from_logits=True),
-              metrics=['accuracy'])
+def train(training_data):
+    model = keras.Sequential([
+        keras.layers.Dense(units=256, activation='relu', input_shape=(image_size, image_size, 1)),
+        keras.layers.Flatten(),
+        keras.layers.Dense(units=2, activation='softmax')
+    ])
 
-	history = model.fit(
-	    labels, 
-	    images
-	)
+    model.compile(optimizer='adam',
+                  loss=losses.CategoricalCrossentropy(from_logits=True),
+                  metrics=['accuracy'])
 
-if __name__== "__main__":
-	environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-	labels, images = read_data()
-	train(labels, images)
+    history = model.fit(
+        training_data
+    )
+
+    model.save(save_path)
+    model.summary()
+
+
+def predict():
+    model = keras.models.load_model(save_path)
+    model.summary()
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='TODO: Write HELP')
+
+    parser.add_argument('-t', '--train', dest='train', action='store_true')
+    args = parser.parse_args()
+
+    environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+    if args.train:
+        data = read_data()
+        train(data)
+    else:
+        predict()
